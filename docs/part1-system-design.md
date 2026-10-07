@@ -46,7 +46,7 @@ sequenceDiagram
     API-->>C: 201 Created { orderId }
 
     Note over DB,MQ: Outbox dispatcher (background service)
-    MQ<<-DB: publish OrderCreated
+    DB->>MQ: publish OrderCreated
     MQ->>PW: OrderCreated
     PW->>PS: Charge(orderId, amount)
     PS-->>PW: Authorized / Declined
