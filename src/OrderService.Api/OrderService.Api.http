@@ -1,0 +1,52 @@
+@host = http://localhost:5084
+
+### Happy path - 201 Created
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "items": [
+    { "productId": 1001, "quantity": 2 },
+    { "productId": 1002, "quantity": 1 }
+  ]
+}
+
+### Insufficient stock - 409 Conflict
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "items": [ { "productId": 1002, "quantity": 9999 } ]
+}
+
+### Inactive product - 409 Conflict
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "items": [ { "productId": 1003, "quantity": 1 } ]
+}
+
+### Unknown customer - 404 Not Found
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 999999,
+  "items": [ { "productId": 1001, "quantity": 1 } ]
+}
+
+### Validation failure - 400 Bad Request (duplicate product, zero quantity)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "items": [
+    { "productId": 1001, "quantity": 0 },
+    { "productId": 1001, "quantity": 1 }
+  ]
+}
