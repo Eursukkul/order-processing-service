@@ -200,7 +200,18 @@ In EF Core this is `ExecuteUpdateAsync` with the guard in the `Where` clause —
 - **Reservation rows** instead of a counter (`InventoryReservations` with a TTL and a filtered unique index) when inventory must be held during a long multi-step checkout. More moving parts; only pay for it if the business needs the hold.
 
 ### Data consistency
-Within the order boundary, consistency is strong (one ACID transaction). Across boundaries (payment, shipping) it is eventual, held together by the outbox, at-least-once delivery, idempotent consumers, and explicit compensation — payment declined publishes `ReleaseInventory`, which increments stock back by exactly the reserved quantity, keyed on the order so a replay cannot double-release. A nightly reconciliation job compares `SUM(OrderItems.Quantity)` for active orders against stock movements and alerts on drift.
+Within the order boundary, consistency is strong (one ACID transaction). Across boundaries (payment, shipping) it is eventual, held together by the outbox, at-least-once delivery, idempotent consumers, and explicit compensation — payment declined publishes `ReleaseInventory`, which increments stock back by exactly the reserved quantity, keyed on the order so a replay cannot double-release.
+
+**Abandoned orders.** Stock is reserved when the order is created, so an order that stays
+`Pending` forever (customer never pays, a consumer never runs) would hold that stock forever. An
+expiry job cancels orders that have been `Pending` longer than the payment window and releases
+their stock in one transaction, using the same conditional pattern —
+`UPDATE Orders SET OrderStatus='Cancelled' WHERE OrderId=@id AND OrderStatus='Pending'` — so it
+cannot race a payment that lands at the same moment: whichever transition commits first wins, and
+the other affects zero rows. A filtered index on `(CreatedAt) WHERE OrderStatus='Pending'` keeps
+the sweep cheap.
+
+A nightly reconciliation job compares `SUM(OrderItems.Quantity)` for active orders against stock movements and alerts on drift.
 
 ---
 

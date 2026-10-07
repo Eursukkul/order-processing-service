@@ -7,7 +7,8 @@ the same constraints, and so a reviewer can see what the assistant was told. The
 ## Stack
 - .NET 10, C# 14, nullable reference types on, implicit usings on.
 - ASP.NET Core minimal APIs with typed results (`Results<T1, T2, …>`), no MVC controllers.
-- EF Core 10 with the SQL Server provider. SQLite in-memory for tests.
+- EF Core 10 with the SQL Server provider. SQLite in-memory for unit tests; Testcontainers SQL
+  Server + `WebApplicationFactory` for integration tests.
 - xUnit. No mocking framework: fakes and a real relational test database instead.
 
 ## Architecture

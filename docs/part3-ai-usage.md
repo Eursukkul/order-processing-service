@@ -46,9 +46,9 @@
 - **Out of scope by instruction:** real payment, real shipping, RabbitMQ infrastructure, Redis.
   The one place they would attach is marked with a comment: the outbox insert inside the transaction.
 
-## 3.2 Unit Tests
+## 3.2 Tests
 
-`dotnet test` → **16 passing**.
+### Unit tests — `tests/OrderService.Tests`, **16 passing**, SQLite in-memory
 
 | Test | Scenario |
 |---|---|
@@ -67,10 +67,26 @@ relational: it ignores transactions and does not translate `ExecuteUpdate`. Thos
 mechanisms this handler's correctness rests on, so testing against it would make the most
 important tests meaningless. SQLite runs real SQL, so a green test means the SQL is valid.
 
-**Honest limitation of the concurrency test.** SQLite serialises writers, so the test proves the
+**Limitation of the SQLite concurrency test.** SQLite serialises writers, so that test proves the
 *guard* (the loser's conditional `UPDATE` matches zero rows → rejected, stock never negative), not
-true parallel contention. Proving the latter needs an integration test against real SQL Server —
-`Testcontainers.MsSql` with N parallel callers — which is the next test I would add.
+true parallel contention. The integration tests below cover that.
+
+### Integration tests — `tests/OrderService.IntegrationTests`, **13 passing**, real SQL Server
+
+A SQL Server 2022 container (Testcontainers) with the committed seed script, and the API hosted
+in-process (`WebApplicationFactory`). Needs Docker.
+
+| Test | What it proves that unit tests cannot |
+|---|---|
+| `ParallelBuyersForTheLastUnit_ExactlyOneWins…` | 20 truly parallel requests for 1 unit → exactly one `201`, nineteen `409`, stock 0, one order — SQL Server row locking |
+| `ParallelMultiItemOrdersInOppositeItemOrder…` | 40 parallel orders listing 1001/1002 in opposite orders → all `201`, stock exact, no deadlock — the `ProductId` lock ordering |
+| `PostThenFollowLocation…` | Transaction runs under the retrying execution strategy; `Location` resolves; timestamps come back as UTC (`Z`) |
+| `OneShortItem_RollsBackTheWholeOrder` | Whole-order rollback on SQL Server |
+| `Rejections_…AsProblemDetails` (8) | `409`/`404`/`400` incl. null item, malformed JSON, no body — all `application/problem+json` with a `traceId` |
+| `GetUnknownOrder_Returns404ProblemDetails` | `404` as ProblemDetails |
+
+The ProblemDetails tests were checked against the previous exception handler and fail on it
+(it returned `application/json`), so they guard that fix.
 
 ---
 
@@ -91,6 +107,10 @@ After that, the assistant was used under my direction for verification and fixes
 3. *Fix the issues found* — code bugs test-first, document inconsistencies directly.
 4. *Add `GET /api/orders/{id}`* so the `201` `Location` header resolves, and state in the README
    that the `Idempotency-Key` header is designed but not implemented.
+5. *Test every remaining case on localhost*, including 20 parallel buyers for the last unit, 40
+   parallel opposite-order multi-item orders, and a forced `500` with SQL Server stopped.
+6. *Turn those manual checks into integration tests* (Testcontainers + `WebApplicationFactory`) so
+   they are repeatable, and fix what the localhost run found.
 
 ## How I reviewed the generated code
 
@@ -107,9 +127,11 @@ following. None of these were caught by the unit tests.
 | 5 | Comparing design with code | The `201` `Location` header pointed at `GET /api/orders/{id}`, which did not exist | Endpoint added; `CreatedAtRoute` ties `Location` to the real route |
 | 6 | Reading the response JSON | Timestamps had no `Z`: SQL Server returns `DATETIME2` as `DateTimeKind.Unspecified` | Value converter re-tags every `DateTime` as UTC on read |
 | 7 | Comparing docs with each other | 1.5 declared `MessageId UNIQUEIDENTIFIER` but its example id is `order-90125-created`; the doc's PK was `MessageId` alone while the seed used `(MessageId, Consumer)`; the 1.3 example total did not match its items | Docs made consistent |
+| 8 | Forcing a `500` by stopping SQL Server | Errors from the global exception handler were `application/json`, not `application/problem+json` like every other error | Handler writes through `IProblemDetailsService`; integration tests assert the media type |
 
-How the code fixes were made: for each code bug (4, 5, 6) a test was written first and seen to
-fail before the fix was applied. The full suite, a zero-warning build, and a fresh end-to-end run
+How the code fixes were made: for code bugs 4, 5 and 6 a test was written first and seen to
+fail before the fix was applied. For 8 the integration test came after the fix, so it was run
+against the old handler to confirm it fails there. The full suite, a zero-warning build, and a fresh end-to-end run
 against a newly created database were re-run after every change.
 
 Scope decisions were mine: implementing `GET` (cheap, fixes a broken contract) but **not**
@@ -134,6 +156,6 @@ real HTTP pipeline was what exposed them.
   `dotnet test`, and tests that pin the testable rules (prices from the catalogue, stock never
   negative, whole-order rollback).
 - Maintaining them: the issues above show what the rules did **not** cover — they constrain how
-  code is written but say nothing about verifying it end to end. The rule I would add next is
-  *"a change is not done until it has been run against a real SQL Server, not only SQLite"*,
-  enforced by a `Testcontainers.MsSql` integration test in CI.
+  code is written but say nothing about verifying it end to end. The rule that follows from it is
+  *"a change is not done until it has been run against a real SQL Server, not only SQLite"* — now
+  backed by the `Testcontainers.MsSql` integration tests. The remaining step is running them in CI.

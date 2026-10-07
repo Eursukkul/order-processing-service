@@ -22,11 +22,16 @@ AI assistant: Claude Code (Anthropic), not GitHub Copilot — see [`docs/part3-a
 ## Run
 
 ```bash
-dotnet build          # 0 warnings
-dotnet test           # 16 passing
+dotnet build                                   # 0 warnings
+dotnet test tests/OrderService.Tests           # 16 unit tests, no database (SQLite in-memory)
+dotnet test tests/OrderService.IntegrationTests  # 13 integration tests, needs Docker
+dotnet test                                    # both
 ```
 
-The tests need no database — they run against SQLite in-memory.
+The integration tests start a real SQL Server in Docker (Testcontainers), apply
+`sql/0-schema-and-seed.sql`, and host the API in-process. They cover what SQLite cannot: truly
+parallel buyers for the last unit, deadlock-free multi-item orders, the retrying execution
+strategy, `DATETIME2` round-tripping, and the HTTP pipeline (status codes, ProblemDetails).
 
 To run the API against SQL Server:
 
@@ -51,6 +56,7 @@ src/OrderService.Api/
   Infrastructure/OrderDbContext    Explicit mapping onto the existing schema
   Features/Orders/                 Vertical slice for POST /api/orders
 tests/OrderService.Tests/          xUnit, SQLite in-memory
+tests/OrderService.IntegrationTests/  xUnit, Testcontainers SQL Server + WebApplicationFactory
 .github/copilot-instructions.md    Committed rules the AI assistant generates against
 ```
 

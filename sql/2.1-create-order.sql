@@ -85,9 +85,11 @@ BEGIN TRY
              WHERE NOT EXISTS (SELECT 1 FROM @Reserved AS r WHERE r.ProductId = i.ProductId)
         );
 
-        /* RAISERROR rather than THROW: it accepts a runtime message, so the
-           caller learns which products failed. Severity 16 + XACT_ABORT ON
-           still unwinds into the CATCH block below. */
+        /* RAISERROR for its built-in printf-style %s formatting, so the caller
+           learns which products failed; THROW would need the message built
+           first with CONCAT/FORMATMESSAGE. RAISERROR does not trigger
+           XACT_ABORT, but severity 16 inside TRY transfers control to the
+           CATCH block below, which rolls back. */
         RAISERROR(N'Order rejected: product missing, inactive, or insufficient stock (ProductId: %s).',
                   16, 1, @Unavailable);
     END

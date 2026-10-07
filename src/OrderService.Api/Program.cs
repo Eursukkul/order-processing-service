@@ -43,13 +43,21 @@ app.MapOrdersEndpoints();
 
 app.Run();
 
-internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+// Exposes the entry point to WebApplicationFactory in the integration tests.
+public partial class Program;
+
+internal sealed class GlobalExceptionHandler(
+    IProblemDetailsService problemDetailsService,
+    ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
         CancellationToken cancellationToken)
     {
+        int status;
+        string title;
+
         // Missing or malformed body: the framework raises BadHttpRequestException carrying
         // the right status (400). That is the client's fault, not a server fault.
         if (exception is BadHttpRequestException badRequest)
@@ -57,31 +65,27 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
             logger.LogWarning("Bad request on {Method} {Path}: {Reason}",
                 httpContext.Request.Method, httpContext.Request.Path, badRequest.Message);
 
-            httpContext.Response.StatusCode = badRequest.StatusCode;
+            status = badRequest.StatusCode;
+            title = "The request body is missing or malformed.";
+        }
+        else
+        {
+            logger.LogError(exception, "Unhandled exception on {Method} {Path}.",
+                httpContext.Request.Method, httpContext.Request.Path);
 
-            await httpContext.Response.WriteAsJsonAsync(new
-            {
-                type = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
-                title = "The request body is missing or malformed.",
-                status = badRequest.StatusCode,
-                traceId = httpContext.TraceIdentifier
-            }, cancellationToken);
-
-            return true;
+            status = StatusCodes.Status500InternalServerError;
+            title = "An unexpected error occurred.";
         }
 
-        logger.LogError(exception, "Unhandled exception on {Method} {Path}.",
-            httpContext.Request.Method, httpContext.Request.Path);
-
-        httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-
-        await httpContext.Response.WriteAsJsonAsync(new
+        // Written through the same ProblemDetails service as every other error response, so
+        // it gets application/problem+json, the RFC type link, and a traceId. The exception
+        // is deliberately not attached: its details belong in the log, not the payload.
+        httpContext.Response.StatusCode = status;
+        await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {
-            type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
-            title = "An unexpected error occurred.",
-            status = StatusCodes.Status500InternalServerError,
-            traceId = httpContext.TraceIdentifier
-        }, cancellationToken);
+            HttpContext = httpContext,
+            ProblemDetails = { Status = status, Title = title }
+        });
 
         return true;
     }
