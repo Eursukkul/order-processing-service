@@ -126,12 +126,12 @@ Each queue is durable, messages are persistent, consumers use manual `ack` with 
 **1. `OrderCreated`**
 ```json
 {
-  "messageId": "4f1b…",
+  "messageId": "order-90125-created",
   "eventType": "order.created",
   "occurredAt": "2026-10-07T08:12:33Z",
   "orderId": 90125,
   "customerId": 101,
-  "totalAmount": 1250.00,
+  "totalAmount": 1000.00,
   "items": [ { "productId": 1001, "quantity": 2, "unitPrice": 500.00 } ]
 }
 ```
@@ -140,12 +140,12 @@ Async is right here because the consumer's job is to call an external PSP. That 
 **2. `OrderPaid`**
 ```json
 {
-  "messageId": "7c90…",
+  "messageId": "order-90125-paid",
   "eventType": "order.paid",
   "occurredAt": "2026-10-07T08:12:41Z",
   "orderId": 90125,
   "paymentTransactionId": "ch_3Qa…",
-  "paidAmount": 1250.00
+  "paidAmount": 1000.00
 }
 ```
 Async is right because shipment creation, invoice generation, and the confirmation email are three independent consumers of the same fact. A queue fans the event out without the payment worker knowing who listens, so adding a loyalty-points consumer later needs no change to the payment code. It also decouples failure: if the carrier API is down, shipping retries while the email still goes out.
@@ -214,9 +214,10 @@ Every message carries a stable `MessageId` (set by the producer, derived from th
 
 ```sql
 CREATE TABLE ProcessedMessages (
-    MessageId    UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    Consumer     VARCHAR(100)     NOT NULL,
-    ProcessedAt  DATETIME2        NOT NULL CONSTRAINT DF_PM_At DEFAULT SYSUTCDATETIME()
+    MessageId    VARCHAR(100)  NOT NULL,
+    Consumer     VARCHAR(100)  NOT NULL,
+    ProcessedAt  DATETIME2     NOT NULL CONSTRAINT DF_PM_At DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_ProcessedMessages PRIMARY KEY (MessageId, Consumer)
 );
 ```
 
@@ -231,7 +232,7 @@ COMMIT
 then ack
 ```
 
-The primary key is what makes it safe: the uniqueness check is enforced by the database under concurrency, not by an `if (alreadyProcessed)` read that has the same read-then-write race as the oversell bug. Two concurrent redeliveries of the same message cannot both insert. The message is acked either way, so a duplicate is cheap and silent.
+The primary key is what makes it safe. It is `(MessageId, Consumer)`, not `MessageId` alone, because one event fans out to several consumers (payment, notification, …) and each must record its own processing independently: the uniqueness check is enforced by the database under concurrency, not by an `if (alreadyProcessed)` read that has the same read-then-write race as the oversell bug. Two concurrent redeliveries of the same message cannot both insert. The message is acked either way, so a duplicate is cheap and silent.
 
 Because work and ledger commit together, the only two outcomes are *both happened* or *neither happened* — there is no window where the order is marked paid but the ledger says unprocessed.
 

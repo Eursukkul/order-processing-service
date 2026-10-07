@@ -5,7 +5,7 @@ the same constraints, and so a reviewer can see what the assistant was told. The
 "development rules governing AI generation" referred to in Part 3.2.
 
 ## Stack
-- .NET 10, C# 13, nullable reference types on, implicit usings on.
+- .NET 10, C# 14, nullable reference types on, implicit usings on.
 - ASP.NET Core minimal APIs with typed results (`Results<T1, T2, …>`), no MVC controllers.
 - EF Core 10 with the SQL Server provider. SQLite in-memory for tests.
 - xUnit. No mocking framework: fakes and a real relational test database instead.

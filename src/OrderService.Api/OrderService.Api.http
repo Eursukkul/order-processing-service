@@ -18,7 +18,7 @@ Content-Type: application/json
 
 {
   "customerId": 101,
-  "items": [ { "productId": 1002, "quantity": 9999 } ]
+  "items": [ { "productId": 1002, "quantity": 50 } ]
 }
 
 ### Inactive product - 409 Conflict
@@ -50,3 +50,9 @@ Content-Type: application/json
     { "productId": 1001, "quantity": 1 }
   ]
 }
+
+### Order status - 200 OK (use the orderId from the happy path)
+GET {{host}}/api/orders/1
+
+### Unknown order - 404 Not Found
+GET {{host}}/api/orders/999999

@@ -19,6 +19,7 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
         }));
 
 builder.Services.AddScoped<ICreateOrderHandler, CreateOrderHandler>();
+builder.Services.AddScoped<GetOrderHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddProblemDetails();
@@ -49,6 +50,26 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         Exception exception,
         CancellationToken cancellationToken)
     {
+        // Missing or malformed body: the framework raises BadHttpRequestException carrying
+        // the right status (400). That is the client's fault, not a server fault.
+        if (exception is BadHttpRequestException badRequest)
+        {
+            logger.LogWarning("Bad request on {Method} {Path}: {Reason}",
+                httpContext.Request.Method, httpContext.Request.Path, badRequest.Message);
+
+            httpContext.Response.StatusCode = badRequest.StatusCode;
+
+            await httpContext.Response.WriteAsJsonAsync(new
+            {
+                type = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+                title = "The request body is missing or malformed.",
+                status = badRequest.StatusCode,
+                traceId = httpContext.TraceIdentifier
+            }, cancellationToken);
+
+            return true;
+        }
+
         logger.LogError(exception, "Unhandled exception on {Method} {Path}.",
             httpContext.Request.Method, httpContext.Request.Path);
 

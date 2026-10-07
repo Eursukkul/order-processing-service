@@ -12,6 +12,9 @@
    - any failure rolls the whole thing back
    ========================================================================== */
 
+USE OrderDb;
+GO
+
 SET NOCOUNT ON;
 SET XACT_ABORT ON;          -- any run-time error aborts the transaction outright
 

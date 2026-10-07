@@ -41,6 +41,13 @@ public static class CreateOrderRequestValidator
         for (var index = 0; index < request.Items.Count; index++)
         {
             var item = request.Items[index];
+
+            if (item is null)
+            {
+                errors[$"Items[{index}]"] = ["Item is required."];
+                continue;
+            }
+
             var itemErrors = new List<string>();
 
             if (item.ProductId <= 0)
@@ -67,6 +74,7 @@ public static class CreateOrderRequestValidator
         // (two partial reservations for one row). Reject instead of silently merging,
         // so the client's intent is never guessed at.
         var duplicateIds = request.Items
+            .Where(i => i is not null)
             .GroupBy(i => i.ProductId)
             .Where(g => g.Count() > 1)
             .Select(g => g.Key)

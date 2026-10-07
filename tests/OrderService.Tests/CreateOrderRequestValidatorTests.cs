@@ -48,6 +48,16 @@ public sealed class CreateOrderRequestValidatorTests
     }
 
     [Fact]
+    public void TryValidate_WithNullItem_FailsInsteadOfThrowing()
+    {
+        // JSON "items": [null] binds to a null element despite the non-nullable type.
+        var request = new CreateOrderRequest(101, [null!, new CreateOrderItem(1001, 1)]);
+
+        Assert.False(CreateOrderRequestValidator.TryValidate(request, out var errors));
+        Assert.True(errors.ContainsKey("Items[0]"));
+    }
+
+    [Fact]
     public void TryValidate_WithInvalidCustomerId_Fails()
     {
         var request = new CreateOrderRequest(0, [new CreateOrderItem(1001, 1)]);

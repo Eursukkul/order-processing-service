@@ -8,3 +8,15 @@ public sealed record CreateOrderRequest(int CustomerId, IReadOnlyList<CreateOrde
 public sealed record CreateOrderItem(int ProductId, int Quantity);
 
 public sealed record CreateOrderResponse(long OrderId, string OrderStatus, decimal TotalAmount);
+
+/// <summary>Response body for <c>GET /api/orders/{orderId}</c>.</summary>
+public sealed record GetOrderResponse(
+    long OrderId,
+    int CustomerId,
+    string OrderStatus,
+    decimal TotalAmount,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    IReadOnlyList<GetOrderItemResponse> Items);
+
+public sealed record GetOrderItemResponse(int ProductId, int Quantity, decimal UnitPrice);

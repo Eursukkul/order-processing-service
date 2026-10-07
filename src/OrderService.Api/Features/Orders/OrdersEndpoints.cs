@@ -17,7 +17,24 @@ public static class OrdersEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        orders.MapGet("/{orderId:long}", GetOrderAsync)
+            .WithName("GetOrder")
+            .WithSummary("Returns an order's current status and line items.")
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    private static async Task<Results<Ok<GetOrderResponse>, ProblemHttpResult>> GetOrderAsync(
+        long orderId,
+        GetOrderHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var order = await handler.GetOrderAsync(orderId, cancellationToken);
+
+        return order is null
+            ? Problem(StatusCodes.Status404NotFound, "Resource not found", $"Order {orderId} was not found.")
+            : TypedResults.Ok(order);
     }
 
     /// <summary>
@@ -25,7 +42,7 @@ public static class OrdersEndpoints
     /// 404 for something that does not exist, 409 for a state conflict the client can
     /// retry against different data, 400 for a malformed request.
     /// </summary>
-    private static async Task<Results<Created<CreateOrderResponse>, ValidationProblem, ProblemHttpResult>>
+    private static async Task<Results<CreatedAtRoute<CreateOrderResponse>, ValidationProblem, ProblemHttpResult>>
         CreateOrderAsync(
             CreateOrderRequest request,
             ICreateOrderHandler handler,
@@ -40,8 +57,8 @@ public static class OrdersEndpoints
 
         return result.Outcome switch
         {
-            CreateOrderOutcome.Created => TypedResults.Created(
-                $"/api/orders/{result.Response!.OrderId}", result.Response),
+            CreateOrderOutcome.Created => TypedResults.CreatedAtRoute(
+                result.Response!, "GetOrder", new { orderId = result.Response!.OrderId }),
 
             CreateOrderOutcome.CustomerNotFound or CreateOrderOutcome.ProductNotFound =>
                 Problem(StatusCodes.Status404NotFound, "Resource not found", result.Detail),

@@ -1,5 +1,9 @@
 # Part 3 — AI-Assisted Development
 
+> **AI tool used: Claude Code (Anthropic) — GitHub Copilot was not used.** Part 3 asks for
+> "an AI coding assistant such as GitHub Copilot"; the workflow below (constrained prompts,
+> line-by-line review, committed rules) is tool-agnostic and applies the same way to Copilot.
+
 ## 3.1 Implementation
 
 `POST /api/orders` lives in `src/OrderService.Api/Features/Orders/`:
@@ -10,6 +14,7 @@
 | `CreateOrderContracts.cs` | Request/response records |
 | `CreateOrderRequestValidator.cs` | Shape validation (no DB access) |
 | `CreateOrderHandler.cs` | Business flow: customer → products → reserve → persist |
+| `GetOrderHandler.cs` | `GET /api/orders/{id}`: status tracking, no-tracking projection |
 | `CreateOrderResult.cs` | Outcome as a value, not an exception |
 | `CreateOrderLog.cs` | Source-generated structured logging |
 | `Infrastructure/OrderDbContext.cs` | Explicit mapping onto the Part 2 schema |
@@ -18,7 +23,7 @@
 
 | Condition | Response |
 |---|---|
-| Valid, stock available | `201 Created` + `{ orderId, orderStatus, totalAmount }` |
+| Valid, stock available | `201 Created` + `{ orderId, orderStatus, totalAmount }`, `Location: /api/orders/{id}` |
 | Malformed body, qty ≤ 0, duplicate ProductId | `400` `ValidationProblemDetails` |
 | Customer or product does not exist | `404` ProblemDetails |
 | Product inactive | `409` ProblemDetails |
@@ -43,7 +48,7 @@
 
 ## 3.2 Unit Tests
 
-`dotnet test` → **13 passing**.
+`dotnet test` → **16 passing**.
 
 | Test | Scenario |
 |---|---|
@@ -54,7 +59,8 @@
 | `…WhenCustomerDoesNotExist_RejectsBeforeTouchingInventory` | Unknown customer, no stock side effect |
 | `…WhenOneItemOfManyIsUnavailable_RollsBackTheWholeOrder` | Atomicity: the first item's reservation is undone |
 | `…WhenTwoOrdersRaceForTheLastUnit_OnlyOneSucceeds` | Concurrency guard: second order rejected, stock lands on 0, never negative |
-| `CreateOrderRequestValidatorTests` (6) | Empty basket, qty 0/-1, duplicate ProductId, bad CustomerId, valid request |
+| `GetOrderHandlerTests` (2) | Order read back with status + items; unknown id → null (404) |
+| `CreateOrderRequestValidatorTests` (7) | Empty basket, qty 0/-1, null item, duplicate ProductId, bad CustomerId, valid request |
 
 **Why SQLite in-memory and not the EF in-memory provider.** The in-memory provider is not
 relational: it ignores transactions and does not translate `ExecuteUpdate`. Those are the two
@@ -115,8 +121,9 @@ defend, and an assistant will happily produce a plausible-sounding architecture 
 
 ## How the rules were established and maintained
 
-- `.github/copilot-instructions.md` is committed, so the rules travel with the repository and
-  Copilot loads them automatically on every request. They are reviewable in a PR like any code.
+- `.github/copilot-instructions.md` is committed, so the rules travel with the repository and are
+  reviewable in a PR like any code. The file uses Copilot's conventional path so a teammate on
+  Copilot picks the same rules up automatically; Claude Code was given them as context.
 - Each rule exists because of a concrete failure, not as style preference — rule 2 exists because
   of the oversell suggestion, rule 7 because of the retry crash, rule 8 because of the in-memory
   provider. The file grows by one line each time an assistant gets something wrong.

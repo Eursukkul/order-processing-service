@@ -2,6 +2,8 @@
 
 .NET 10 · EF Core 10 · SQL Server · xUnit
 
+AI assistant: Claude Code (Anthropic), not GitHub Copilot — see [`docs/part3-ai-usage.md`](docs/part3-ai-usage.md).
+
 ## Answers
 
 | Part | Where |
@@ -13,7 +15,7 @@
 | 1.5 Duplicate message processing / idempotency | same file |
 | 2.1 Create-order transaction (T-SQL) | [`sql/2.1-create-order.sql`](sql/2.1-create-order.sql) |
 | — schema + seed so 2.1 runs | [`sql/0-schema-and-seed.sql`](sql/0-schema-and-seed.sql) |
-| 3.1 `POST /api/orders` | [`src/OrderService.Api/Features/Orders/`](src/OrderService.Api/Features/Orders) |
+| 3.1 `POST /api/orders` (+ `GET /api/orders/{id}` for status tracking) | [`src/OrderService.Api/Features/Orders/`](src/OrderService.Api/Features/Orders) |
 | 3.2 Unit tests + AI-assistance writeup | [`tests/OrderService.Tests/`](tests/OrderService.Tests), [`docs/part3-ai-usage.md`](docs/part3-ai-usage.md) |
 | Rules governing AI generation | [`.github/copilot-instructions.md`](.github/copilot-instructions.md) |
 
@@ -21,7 +23,7 @@
 
 ```bash
 dotnet build          # 0 warnings
-dotnet test           # 13 passing
+dotnet test           # 16 passing
 ```
 
 The tests need no database — they run against SQLite in-memory.
@@ -55,7 +57,13 @@ tests/OrderService.Tests/          xUnit, SQLite in-memory
 ## Scope
 
 Implemented: validation, product existence/active/availability checks, atomic inventory
-reservation, order creation in one transaction, structured logging, ProblemDetails error handling.
+reservation, order creation in one transaction, structured logging, ProblemDetails error handling,
+and `GET /api/orders/{id}` for status tracking (the `Location` of the `201`).
+
+Designed but not implemented: the `Idempotency-Key` header on `POST /api/orders` (Part 1.1 step 2,
+Part 1.5). It is not in the 3.1 requirements, and doing it properly needs a new
+`IdempotencyKeys` table written in the same transaction as the order — a schema change beyond
+the given tables. Until then a client retry after a timeout can create a second order.
 
 Not implemented, per the brief: real payment integration, real shipping integration, RabbitMQ
 infrastructure, Redis infrastructure. The single attachment point for the async flow — an outbox

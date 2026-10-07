@@ -1,5 +1,10 @@
 /* Schema + seed data so 2.1-create-order.sql can actually be run. */
 
+IF DB_ID('OrderDb') IS NULL CREATE DATABASE OrderDb;
+GO
+USE OrderDb;
+GO
+
 IF OBJECT_ID('dbo.OrderItems') IS NOT NULL DROP TABLE dbo.OrderItems;
 IF OBJECT_ID('dbo.Orders')     IS NOT NULL DROP TABLE dbo.Orders;
 IF OBJECT_ID('dbo.Products')   IS NOT NULL DROP TABLE dbo.Products;
@@ -49,9 +54,9 @@ GO
 IF OBJECT_ID('dbo.ProcessedMessages') IS NULL
 CREATE TABLE dbo.ProcessedMessages
 (
-    MessageId   UNIQUEIDENTIFIER NOT NULL,
-    Consumer    VARCHAR(100)     NOT NULL,
-    ProcessedAt DATETIME2        NOT NULL CONSTRAINT DF_PM_ProcessedAt DEFAULT SYSUTCDATETIME(),
+    MessageId   VARCHAR(100) NOT NULL,
+    Consumer    VARCHAR(100) NOT NULL,
+    ProcessedAt DATETIME2    NOT NULL CONSTRAINT DF_PM_ProcessedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_ProcessedMessages PRIMARY KEY (MessageId, Consumer)
 );
 GO
