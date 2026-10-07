@@ -112,6 +112,55 @@ After that, the assistant was used under my direction for verification and fixes
 6. *Turn those manual checks into integration tests* (Testcontainers + `WebApplicationFactory`) so
    they are repeatable, and fix what the localhost run found.
 
+## How I used the assistant to implement
+
+Everything after the first commit was implemented by the assistant under my direction. The split
+of work was deliberate:
+
+| The assistant | Me |
+|---|---|
+| Ran the build, tests, API, SQL scripts, and ad-hoc load scripts | Decided what had to be checked, and when a result was good enough |
+| Proposed options with their cost (e.g. three ways to close the design/code gap) | Chose the option — `GET` endpoint yes, `Idempotency-Key` no |
+| Wrote the tests and the production code | Set the scope of each change, and reviewed localhost myself before allowing a commit |
+| Drafted the documentation | Required it to state only what is verifiable, including that the tool was Claude Code, not Copilot |
+
+### The loop for a code change
+Used for the validator, `GET`, and UTC fixes. The two exception-handler fixes broke step 1 — they
+were fixed first, and only got tests later with the integration suite (see below).
+
+1. **Failing test first.** The assistant writes the test and runs it red — e.g.
+   `TryValidate_WithNullItem_FailsInsteadOfThrowing` failed with the `NullReferenceException` it
+   was written to catch.
+2. **Smallest fix** that turns it green, matching the rules in `.github/copilot-instructions.md`.
+3. **Zero-warning build and the full suite**, not just the new test.
+4. **Run it for real** — the API against SQL Server in Docker, every `.http` case, plus edge cases.
+5. **I review and approve the commit.** The assistant does not commit on its own.
+
+### Worked examples
+- **`GET /api/orders/{id}`.** The assistant laid out three options with effort and risk; I chose
+  the endpoint plus a README note over implementing idempotency. The tests were written first and
+  did not compile (`GetOrderHandler` did not exist yet). Then the handler, and `CreatedAtRoute` so
+  `Location` is tied to the real route. Verified by following `Location` from a real `POST`.
+- **UTC timestamps.** A `DateTimeKind.Utc` assertion was added to the existing test first and
+  failed. The fix is one value converter in `ConfigureConventions`, so it covers every `DateTime`
+  rather than patching each property.
+- **Integration tests.** I asked for them after a manual localhost run had already shown the race
+  and deadlock behaviour, so the behaviour would stay proven. They needed two new packages
+  (`Testcontainers.MsSql`, `Microsoft.AspNetCore.Mvc.Testing`), which rule 10 requires justifying.
+  The fixture reuses the committed seed script instead of a second copy of the schema. Because
+  these tests came *after* the content-type fix, the assistant ran them against the old exception
+  handler to confirm they fail there (2 failures) — a test that cannot fail proves nothing.
+
+### Where the assistant got it wrong
+- Its first localhost deadlock script reported 5 failures. The API was fine: the script sent no
+  requests at all (macOS `xargs -I` caps the command at 255 bytes). It was caught because stock
+  was still exactly 1000 — a check on the database state, not only the status codes.
+- It flagged the wrong `Content-Type` on `500` responses from reading the code, and that claim was
+  kept marked as unverified until a `500` was forced by stopping SQL Server and the header was
+  observed.
+- The originally generated SQL comment justified `RAISERROR` over `THROW` with a reason that is not
+  true (`THROW` accepts a variable). It read plausibly; it was only caught by checking it.
+
 ## How I reviewed the generated code
 
 The 13 generated unit tests were green from the start. Review by **running the system end to end
